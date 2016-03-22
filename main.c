@@ -21,6 +21,8 @@
 #include <arpa/inet.h>
 
 #define DEVICE "wlan0"
+
+// only allocate enough for ethernet header and arp packet (14 + 28)
 #define BUF_SIZE 42
 #define ETH_P_NULL 0x0
 #define ETH_MAC_LEN ETH_ALEN
@@ -34,49 +36,82 @@ void* buffer;
 void sigint(int signum);
 
 struct __attribute__((packed)) arp_header {
-	unsigned short arp_hd;
-	unsigned short arp_pr;
-	unsigned char arp_hd1;
-	unsigned char arp_pr1;
-	unsigned short arp_op;
-	unsigned char arp_sha[6];
-	unsigned char arp_spa[4];
-	unsigned char arp_dha[6];
-	unsigned char arp_dpa[4];
+	unsigned short arp_hardware_type;
+	unsigned short arp_protocol_type;
+	unsigned char arp_hardware_size;
+	unsigned char arp_proto_size;
+	unsigned short arp_opcode;
+	unsigned char arp_senderMAC[6];
+	unsigned char arp_senderIP[4];
+	unsigned char arp_targetMAC[6];
+	unsigned char arp_targetIP[4];
 };
 
-int main(int argc, char **argv) {
-	printf("testing\n");
+/* Print out the data within the ethernet and arp packet */
+void printarppacket(struct arp_header* arp_hdr, struct ethhdr* eh) {
+	printf("header type: %x proto type: %x\n", arp_hdr->arp_hardware_type,
+			arp_hdr->arp_protocol_type);
+	printf("sender mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			arp_hdr->arp_senderMAC[0], arp_hdr->arp_senderMAC[1],
+			arp_hdr->arp_senderMAC[2], arp_hdr->arp_senderMAC[3],
+			arp_hdr->arp_senderMAC[4], arp_hdr->arp_senderMAC[5]);
+	printf("sender ip address: %02d:%02d:%02d:%02d\n", arp_hdr->arp_senderIP[0],
+			arp_hdr->arp_senderIP[1], arp_hdr->arp_senderIP[2],
+			arp_hdr->arp_senderIP[3]);
+	printf("target mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			arp_hdr->arp_targetMAC[0], arp_hdr->arp_targetMAC[1],
+			arp_hdr->arp_targetMAC[2], arp_hdr->arp_targetMAC[3],
+			arp_hdr->arp_targetMAC[4], arp_hdr->arp_targetMAC[5]);
+	printf("target ip address: %02d:%02d:%02d:%02d\n", arp_hdr->arp_targetIP[0],
+			arp_hdr->arp_targetIP[1], arp_hdr->arp_targetIP[2],
+			arp_hdr->arp_targetIP[3]);
+	printf("ether dest mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
+			eh->h_dest[4], eh->h_dest[5]);
+	printf("ether src mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
+			eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
+			eh->h_source[4], eh->h_source[5]);
+}
 
+int main(int argc, char **argv) {
+
+	// ioctl request struct
 	struct ifreq ifr;
 	struct sockaddr_ll sockaddr;
 	int ifindex = 0;
 	unsigned char src_mac[6];
 
+	// allocate buffer for entire ethernet packet
 	buffer = (void*) malloc(BUF_SIZE);
 	unsigned char* etherhead = buffer;
 	struct ethhdr *eh = (struct ethhdr *) etherhead;
 
-	unsigned char* arphead = buffer + 14;
-	struct arp_header *ah;
+	// get the arp packet by jumping over the 14 byte ethernet header
+	unsigned char* arp_header_start = buffer + ETH_HLEN;
+	struct arp_header *arp_hdr;
 
 	// create raw Ethernet socket
 	if ((sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
 		perror("error during socket creation");
+		exit(1);
 	}
 
 	// get ethernet interface index
 	strncpy(ifr.ifr_ifrn.ifrn_name, DEVICE, IFNAMSIZ);
 	if (ioctl(sockfd, SIOCGIFINDEX, &ifr) == -1) {
 		perror("unable to get interface");
+		exit(1);
 	}
 	ifindex = ifr.ifr_ifindex;
-	printf("got interface index: %i\n", ifindex);
+	printf("%s has interface index: %i\n", DEVICE, ifindex);
 
 	// get hardware address
 	if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) == -1) {
 		perror("unable to get hardware address");
+		exit(1);
 	}
+
+	// copy our mac address into the
 	for (int i = 0; i < 6; i++) {
 		src_mac[i] = ifr.ifr_ifru.ifru_hwaddr.sa_data[i];
 	}
@@ -96,8 +131,6 @@ int main(int argc, char **argv) {
 	puts("established handler for SIGINT");
 	puts("waiting for incoming packets...");
 
-	printf("size of arp_dpa %lu\n", sizeof(ah->arp_dpa[1]));
-
 	while (1) {
 		ssize_t length;
 
@@ -106,41 +139,21 @@ int main(int argc, char **argv) {
 
 		if (length == -1) {
 			perror("no data received");
+			exit(1);
 		}
 
+		// only process arp packets
 		if (ntohs(eh->h_proto) == ETH_P_ARP) {
-//			unsigned char buf_arp_dha[6];
-			unsigned char buf_arp_dpa[4];
 
-			ah = (struct arp_header *) arphead;
-			if (ntohs(ah->arp_op) != ARPOP_REQUEST) {
+			unsigned char buf_arp_dpa[4];
+			arp_hdr = (struct arp_header *) arp_header_start;
+
+			// only process arp requests
+			if (ntohs(arp_hdr->arp_opcode) != ARPOP_REQUEST) {
 				continue;
 			}
 
-			printf("buffer is  %s\n", (char*) ah);
-			printf("header type: %x proto type: %x\n", ah->arp_hd, ah->arp_pr);
-			printf("header length: %x\n", ah->arp_op);
-			printf("sender mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					ah->arp_sha[0], ah->arp_sha[1], ah->arp_sha[2],
-					ah->arp_sha[3], ah->arp_sha[4], ah->arp_sha[5]);
-
-			printf("sender ip address: %02d:%02d:%02d:%02d\n", ah->arp_spa[0],
-					ah->arp_spa[1], ah->arp_spa[2], ah->arp_spa[3]);
-
-			printf("target mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					ah->arp_dha[0], ah->arp_dha[1], ah->arp_dha[2],
-					ah->arp_dha[3], ah->arp_dha[4], ah->arp_dha[5]);
-
-			printf("target ip address: %02d:%02d:%02d:%02d\n", ah->arp_dpa[0],
-					ah->arp_dpa[1], ah->arp_dpa[2], ah->arp_dpa[3]);
-
-			printf("ether dest mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
-					eh->h_dest[4], eh->h_dest[5]);
-
-			printf("ether src mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					eh->h_source[0], eh->h_source[1], eh->h_source[2],
-					eh->h_source[3], eh->h_source[4], eh->h_source[5]);
+			printarppacket(arp_hdr, eh);
 
 			puts("switch around src and dest\n");
 
@@ -158,47 +171,33 @@ int main(int argc, char **argv) {
 					eh->h_source[0], eh->h_source[1], eh->h_source[2],
 					eh->h_source[3], eh->h_source[4], eh->h_source[5]);
 
-			ah->arp_op = htons(ARPOP_REPLY);
+			// set the arp response type to REPY
+			arp_hdr->arp_opcode = htons(ARPOP_REPLY);
 
 			for (int i = 0; i < 4; ++i) {
-				buf_arp_dpa[i] = ah->arp_dpa[i];
+				buf_arp_dpa[i] = arp_hdr->arp_targetIP[i];
 			}
 
 			// dest ip -> ip buffer
-			memcpy(buf_arp_dpa, ah->arp_dpa, sizeof(buf_arp_dpa));
+			memcpy(buf_arp_dpa, arp_hdr->arp_targetIP, sizeof(buf_arp_dpa));
 			// sender mac addr -> dest mac addr
-			memcpy(ah->arp_dha, ah->arp_sha, sizeof(ah->arp_dha));
+			memcpy(arp_hdr->arp_targetMAC, arp_hdr->arp_senderMAC,
+					sizeof(arp_hdr->arp_targetMAC));
 			// sender ip -> dest ip
-			memcpy(ah->arp_dpa, ah->arp_spa, sizeof(ah->arp_dpa));
+			memcpy(arp_hdr->arp_targetIP, arp_hdr->arp_senderIP,
+					sizeof(arp_hdr->arp_targetIP));
 			// ip buffer -> sender ip
-			memcpy(ah->arp_spa, buf_arp_dpa, sizeof(ah->arp_spa));
+			memcpy(arp_hdr->arp_senderIP, buf_arp_dpa, sizeof(arp_hdr->arp_senderIP));
 
 			// change sender mac addr
-			ah->arp_sha[0] = 0x00;
-			ah->arp_sha[1] = 0x1e;
-			ah->arp_sha[2] = 0x73;
-			ah->arp_sha[3] = 0xda;
-			ah->arp_sha[4] = 0x70;
-			ah->arp_sha[5] = 0x1f;
+			arp_hdr->arp_senderMAC[0] = 0x00;
+			arp_hdr->arp_senderMAC[1] = 0x1e;
+			arp_hdr->arp_senderMAC[2] = 0x73;
+			arp_hdr->arp_senderMAC[3] = 0xda;
+			arp_hdr->arp_senderMAC[4] = 0x70;
+			arp_hdr->arp_senderMAC[5] = 0x1f;
 
-			printf("sender mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					ah->arp_sha[0], ah->arp_sha[1], ah->arp_sha[2],
-					ah->arp_sha[3], ah->arp_sha[4], ah->arp_sha[5]);
-
-			printf("sender ip address: %02d:%02d:%02d:%02d\n", ah->arp_spa[0],
-					ah->arp_spa[1], ah->arp_spa[2], ah->arp_spa[3]);
-
-			printf("target mac addres: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					ah->arp_dha[0], ah->arp_dha[1], ah->arp_dha[2],
-					ah->arp_dha[3], ah->arp_dha[4], ah->arp_dha[5]);
-
-			printf("target ip address: %02d:%02d:%02d:%02d\n", ah->arp_dpa[0],
-					ah->arp_dpa[1], ah->arp_dpa[2], ah->arp_dpa[3]);
-
-			printf("header type: %x proto type: %x\n", ah->arp_hd, ah->arp_pr);
-			printf("header length: %x\n", ah->arp_op);
-
-			printf("operation: %x\n", ah->arp_op);
+			printarppacket(arp_hdr, eh);
 
 			int sent = sendto(sockfd, buffer, BUF_SIZE, 0,
 					(struct sockaddr*) &sockaddr, sizeof(sockaddr));
