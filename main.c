@@ -1,5 +1,17 @@
 /*
  * main.c
+ *
+ * Required system packages:
+ * - airmon-ng
+ *
+ * Running:
+ * airmmon-ng start wlan0
+ *
+ * ./main
+ *
+ * airmon-ng stop mon0
+ *
+ * Make sure to change DEVICE to "mon0"
  */
 
 #include <sys/socket.h>
@@ -127,8 +139,9 @@ int main(int argc, char **argv) {
 	sockaddr.sll_addr[6] = 0x00;
 	sockaddr.sll_addr[7] = 0x00;
 
+	// register program exit hook
 	signal(SIGINT, sigint);
-	puts("established handler for SIGINT");
+
 	puts("waiting for incoming packets...");
 
 	while (1) {
