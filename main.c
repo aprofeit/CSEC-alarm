@@ -27,15 +27,15 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <linux/if_packet.h>
+#include <linux/wireless.h>if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 #include <arpa/inet.h>
 
 #define DEVICE "wlan0"
 
-// only allocate enough for ethernet header and arp packet (14 + 28)
-#define BUF_SIZE 42
+// allocate a small buffer for the packet
+#define BUF_SIZE 500
 #define ETH_P_NULL 0x0
 #define ETH_MAC_LEN ETH_ALEN
 #define ETH_ARP 0x0806
@@ -57,6 +57,13 @@ struct __attribute__((packed)) arp_header {
 	unsigned char arp_senderIP[4];
 	unsigned char arp_targetMAC[6];
 	unsigned char arp_targetIP[4];
+};
+
+struct __attribute__((packed)) radiotap_header {
+	uint8_t version;
+	uint8_t pad;
+	uint16_t length;
+	uint32_t present;
 };
 
 /* Print out the data within the ethernet and arp packet */
@@ -154,6 +161,11 @@ int main(int argc, char **argv) {
 			perror("no data received");
 			exit(1);
 		}
+
+		struct radiotap_header *radiotap_hdr = (struct radiotap_header *) buffer;
+		printf("hdr version: %02X\n", (uint8_t) radiotap_hdr->version);
+		printf("hdr len: %i\n", (uint16_t) radiotap_hdr->length);
+		printf("int size %x\n", sizeof(radiotap_hdr));
 
 		// only process arp packets
 		if (ntohs(eh->h_proto) == ETH_P_ARP) {
