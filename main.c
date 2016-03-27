@@ -53,7 +53,7 @@ void* buffer;
 
 void sigint(int signum);
 
-struct __attribute__((packed)) arp_header {
+struct arp_header {
 	unsigned short arp_hardware_type;
 	unsigned short arp_protocol_type;
 	unsigned char arp_hardware_size;
@@ -63,29 +63,45 @@ struct __attribute__((packed)) arp_header {
 	unsigned char arp_senderIP[4];
 	unsigned char arp_targetMAC[6];
 	unsigned char arp_targetIP[4];
-};
+}__attribute__((packed));
 
-struct __attribute__((packed)) radiotap_header {
+struct radiotap_header {
 	uint8_t version;
 	uint8_t pad;
 	uint16_t length;
 	uint32_t present;
-};
+}__attribute__((packed));
 
-struct __attribute__ ((packed)) radiotap_data {
+struct radiotap_data {
 	uint32_t pad1;
 	uint16_t pad2;
 	char signal_strength;
-};
+}__attribute__((packed));
 
-struct __attribute__((packed)) i80211_hdr {
+// 802.11 header
+struct i80211_hdr {
 	uint16_t frame_ctl;
 	uint16_t duration;
 	struct ether_addr dst_addr;
 	struct ether_addr src_addr;
 	struct ether_addr trans_addr;
 	uint16_t seq_num;
-};
+}__attribute__((packed));
+
+// 802.11 management frame
+struct i80211_mgt {
+	uint64_t timestamp;
+	uint16_t beacon_interval;
+	uint16_t capabilities;
+	void* elements;
+}__attribute__((packed));
+
+// 802.11 Management frame element
+struct i80211_mgt_elem {
+	uint8_t id;
+	uint8_t length;
+	void* data;
+}__attribute__((packed));
 
 /* Print out the data within the ethernet and arp packet */
 void printarppacket(struct arp_header* arp_hdr, struct ethhdr* eh) {
@@ -200,8 +216,10 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
-		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr + sizeof(radiotap_hdr);
-		struct radiotap_data* radiotap_data_hdr = (struct radiotap_data *) radiotap_data_hdr_start;
+		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr
+				+ sizeof(radiotap_hdr);
+		struct radiotap_data* radiotap_data_hdr =
+				(struct radiotap_data *) radiotap_data_hdr_start;
 
 		printf("signal strength: %d\n", radiotap_data_hdr->signal_strength);
 
@@ -214,7 +232,7 @@ int main(int argc, char **argv) {
 //		printf("src addr: %s\n", ETH_NTOA(i80211_header->src_addr));
 //		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
 
-		// only process arp packets
+// only process arp packets
 		if (ntohs(eh->h_proto) == ETH_P_ARP) {
 
 			unsigned char buf_arp_dpa[4];
