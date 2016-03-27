@@ -27,18 +27,24 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <linux/wireless.h>if_packet.h>
+#include <linux/wireless.h>
+#include <linux/if_packet.h>
 #include <linux/if_ether.h>
-#include <linux/if_arp.h>
+
 #include <arpa/inet.h>
+#include <netinet/ether.h>
 
 #define DEVICE "wlan0"
+
+#define ETH_NTOA(x) (ether_ntoa(&(x)))
 
 // allocate a small buffer for the packet
 #define BUF_SIZE 500
 #define ETH_P_NULL 0x0
 #define ETH_MAC_LEN ETH_ALEN
 #define ETH_ARP 0x0806
+
+#define MGMT_BEACON_FRAME 0x8000
 
 int answered_packets;
 int total_packets;
@@ -64,6 +70,15 @@ struct __attribute__((packed)) radiotap_header {
 	uint8_t pad;
 	uint16_t length;
 	uint32_t present;
+};
+
+struct i80211_hdr {
+	uint16_t frame_ctl;
+	uint16_t duration;
+	struct ether_addr dst_addr;
+	struct ether_addr src_addr;
+	struct ether_addr trans_addr;
+	uint16_t seq_num;
 };
 
 /* Print out the data within the ethernet and arp packet */
@@ -163,9 +178,32 @@ int main(int argc, char **argv) {
 		}
 
 		struct radiotap_header *radiotap_hdr = (struct radiotap_header *) buffer;
-		printf("hdr version: %02X\n", (uint8_t) radiotap_hdr->version);
-		printf("hdr len: %i\n", (uint16_t) radiotap_hdr->length);
-		printf("int size %x\n", sizeof(radiotap_hdr));
+//		printf("hdr version: %02X\n", (uint8_t) radiotap_hdr->version);
+//		printf("hdr len: %i\n", (uint16_t) radiotap_hdr->length);
+//		printf("int size %i\n", radiotap_hdr->present);
+
+//		printf("radio ptr: %p\n", (void*) radiotap_hdr);
+		unsigned char* i80211hdr_start = (void*) radiotap_hdr + radiotap_hdr->length;
+
+		// get 80211 header from buffer
+		struct i80211_hdr *i80211_header = (struct i80211_hdr *) i80211hdr_start;
+
+		// determine if it's a management frame and a beacon
+		if (ntohs(i80211_header->frame_ctl) == MGMT_BEACON_FRAME) {
+			printf("its a management frame\n");
+		} else {
+			continue;
+		}
+
+		printf("80211 ptr: %p\n", i80211_header);
+
+		printf("seq num: %i\n", i80211_header->seq_num);
+		printf("framectl: %i\n", i80211_header->frame_ctl);
+		printf("duration: %i\n", i80211_header->duration);
+		printf("dst addr: %s\n", ETH_NTOA(i80211_header->dst_addr));
+		printf("src addr: %s\n", ETH_NTOA(i80211_header->src_addr));
+		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
+
 
 		// only process arp packets
 		if (ntohs(eh->h_proto) == ETH_P_ARP) {
@@ -212,7 +250,8 @@ int main(int argc, char **argv) {
 			memcpy(arp_hdr->arp_targetIP, arp_hdr->arp_senderIP,
 					sizeof(arp_hdr->arp_targetIP));
 			// ip buffer -> sender ip
-			memcpy(arp_hdr->arp_senderIP, buf_arp_dpa, sizeof(arp_hdr->arp_senderIP));
+			memcpy(arp_hdr->arp_senderIP, buf_arp_dpa,
+					sizeof(arp_hdr->arp_senderIP));
 
 			// change sender mac addr
 			arp_hdr->arp_senderMAC[0] = 0x00;
