@@ -72,7 +72,13 @@ struct __attribute__((packed)) radiotap_header {
 	uint32_t present;
 };
 
-struct i80211_hdr {
+struct __attribute__ ((packed)) radiotap_data {
+	uint32_t pad1;
+	uint16_t pad2;
+	char signal_strength;
+};
+
+struct __attribute__((packed)) i80211_hdr {
 	uint16_t frame_ctl;
 	uint16_t duration;
 	struct ether_addr dst_addr;
@@ -183,27 +189,30 @@ int main(int argc, char **argv) {
 //		printf("int size %i\n", radiotap_hdr->present);
 
 //		printf("radio ptr: %p\n", (void*) radiotap_hdr);
-		unsigned char* i80211hdr_start = (void*) radiotap_hdr + radiotap_hdr->length;
+		unsigned char* i80211hdr_start = (void*) radiotap_hdr
+				+ radiotap_hdr->length;
 
 		// get 80211 header from buffer
 		struct i80211_hdr *i80211_header = (struct i80211_hdr *) i80211hdr_start;
 
 		// determine if it's a management frame and a beacon
-		if (ntohs(i80211_header->frame_ctl) == MGMT_BEACON_FRAME) {
-			printf("its a management frame\n");
-		} else {
+		if (ntohs(i80211_header->frame_ctl) != MGMT_BEACON_FRAME) {
 			continue;
 		}
 
-		printf("80211 ptr: %p\n", i80211_header);
+		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr + sizeof(radiotap_hdr);
+		struct radiotap_data* radiotap_data_hdr = (struct radiotap_data *) radiotap_data_hdr_start;
 
-		printf("seq num: %i\n", i80211_header->seq_num);
-		printf("framectl: %i\n", i80211_header->frame_ctl);
-		printf("duration: %i\n", i80211_header->duration);
-		printf("dst addr: %s\n", ETH_NTOA(i80211_header->dst_addr));
-		printf("src addr: %s\n", ETH_NTOA(i80211_header->src_addr));
-		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
+		printf("signal strength: %d\n", radiotap_data_hdr->signal_strength);
 
+//		printf("80211 ptr: %p\n", i80211_header);
+//
+//		printf("seq num: %i\n", i80211_header->seq_num);
+//		printf("framectl: %i\n", i80211_header->frame_ctl);
+//		printf("duration: %i\n", i80211_header->duration);
+//		printf("dst addr: %s\n", ETH_NTOA(i80211_header->dst_addr));
+//		printf("src addr: %s\n", ETH_NTOA(i80211_header->src_addr));
+//		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
 
 		// only process arp packets
 		if (ntohs(eh->h_proto) == ETH_P_ARP) {
