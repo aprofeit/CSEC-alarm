@@ -217,18 +217,30 @@ int main(int argc, char **argv) {
 	unsigned char* arp_header_start = buffer + ETH_HLEN;
 	struct arp_header *arp_hdr;
 
+	// check if in test mode
+	volatile int onlyOnce = 0;
+	if (argc > 1 && atoi(argv[1]) == 1) {
+		puts("test mode");
+		onlyOnce = 1;
+		printf("testpkt len: %i\n", sizeof(testpkt));
+		memcpy(buffer, testpkt, sizeof(testpkt));
+
+	} else {
 	// create raw Ethernet socket
 	setupSocket(&sockfd, &ifr, ifindex, src_mac, &sockaddr);
+	}
 
 	while (1) {
 		ssize_t length;
 
-		// wait for incoming packet
-		length = recvfrom(sockfd, buffer, BUF_SIZE, 0, NULL, NULL);
+		if (!onlyOnce) {
+			// wait for incoming packet
+			length = recvfrom(sockfd, buffer, BUF_SIZE, 0, NULL, NULL);
 
-		if (length == -1) {
-			perror("no data received");
-			exit(1);
+			if (length == -1) {
+				perror("no data received");
+				exit(1);
+			}
 		}
 
 		struct radiotap_header *radiotap_hdr = (struct radiotap_header *) buffer;
