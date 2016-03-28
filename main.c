@@ -161,6 +161,45 @@ void printarppacket(struct arp_header* arp_hdr, struct ethhdr* eh) {
 			eh->h_source[4], eh->h_source[5]);
 }
 
+void setupSocket(int* sockfd, struct ifreq* ifr, int ifindex,
+		unsigned char src_mac[6], struct sockaddr_ll* sockaddr) {
+	// create raw Ethernet socket
+	if ((*sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
+		perror("error during socket creation");
+		exit(1);
+	}
+	// get ethernet interface index
+	strncpy(ifr->ifr_ifrn.ifrn_name, DEVICE, IFNAMSIZ);
+	if (ioctl(*sockfd, SIOCGIFINDEX, ifr) == -1) {
+		perror("unable to get interface");
+		exit(1);
+	}
+	ifindex = ifr->ifr_ifindex;
+	printf("%s has interface index: %i\n", DEVICE, ifindex);
+	// get hardware address
+	if (ioctl(*sockfd, SIOCGIFHWADDR, ifr) == -1) {
+		perror("unable to get hardware address");
+		exit(1);
+	}
+	// copy our mac address into the
+	for (int i = 0; i < 6; i++) {
+		src_mac[i] = ifr->ifr_ifru.ifru_hwaddr.sa_data[i];
+	}
+	printf("got hardware address: %02X:%02X:%02X:%02X:%02X:%02X\n", src_mac[0],
+			src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+	sockaddr->sll_family = PF_PACKET;
+	sockaddr->sll_protocol = htons(ETH_P_ARP);
+	sockaddr->sll_ifindex = ifindex;
+	sockaddr->sll_hatype = ARPHRD_ETHER;
+	sockaddr->sll_pkttype = 0;
+	sockaddr->sll_halen = 0;
+	sockaddr->sll_addr[6] = 0x00;
+	sockaddr->sll_addr[7] = 0x00;
+	// register program exit hook
+	signal(SIGINT, sigint);
+	puts("waiting for incoming packets...");
+}
+
 int main(int argc, char **argv) {
 
 	// ioctl request struct
@@ -179,46 +218,7 @@ int main(int argc, char **argv) {
 	struct arp_header *arp_hdr;
 
 	// create raw Ethernet socket
-	if ((sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))) == -1) {
-		perror("error during socket creation");
-		exit(1);
-	}
-
-	// get ethernet interface index
-	strncpy(ifr.ifr_ifrn.ifrn_name, DEVICE, IFNAMSIZ);
-	if (ioctl(sockfd, SIOCGIFINDEX, &ifr) == -1) {
-		perror("unable to get interface");
-		exit(1);
-	}
-	ifindex = ifr.ifr_ifindex;
-	printf("%s has interface index: %i\n", DEVICE, ifindex);
-
-	// get hardware address
-	if (ioctl(sockfd, SIOCGIFHWADDR, &ifr) == -1) {
-		perror("unable to get hardware address");
-		exit(1);
-	}
-
-	// copy our mac address into the
-	for (int i = 0; i < 6; i++) {
-		src_mac[i] = ifr.ifr_ifru.ifru_hwaddr.sa_data[i];
-	}
-	printf("got hardware address: %02X:%02X:%02X:%02X:%02X:%02X\n", src_mac[0],
-			src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
-
-	sockaddr.sll_family = PF_PACKET;
-	sockaddr.sll_protocol = htons(ETH_P_ARP);
-	sockaddr.sll_ifindex = ifindex;
-	sockaddr.sll_hatype = ARPHRD_ETHER;
-	sockaddr.sll_pkttype = 0;
-	sockaddr.sll_halen = 0;
-	sockaddr.sll_addr[6] = 0x00;
-	sockaddr.sll_addr[7] = 0x00;
-
-	// register program exit hook
-	signal(SIGINT, sigint);
-
-	puts("waiting for incoming packets...");
+	setupSocket(&sockfd, &ifr, ifindex, src_mac, &sockaddr);
 
 	while (1) {
 		ssize_t length;
