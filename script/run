@@ -30,18 +30,20 @@ trap "{ $FORCE_STOP ; exit 0; }" SIGINT SIGTERM EXIT
 # enable monitor mode for the device
 $START > /dev/null 2>&1
 
-for (( CHANNEL = 1; CHANNEL < 12; CHANNEL++ )); do
+while [[ true ]]; do
+    for (( CHANNEL = 1; CHANNEL < 12; CHANNEL++ )); do
 
-    # change channel
-    echo "#channel $CHANNEL"
-    iwconfig $DEVICE channel $CHANNEL
+        # change channel
+        echo "#channel $CHANNEL"
+        iwconfig $DEVICE channel $CHANNEL
 
-    # execute the packet-monitor for a period of time
-    set +e
-    timeout $TIME $PACKET_MONITOR $CHANNEL
-    set -e
+        # execute the packet-monitor for a period of time
+        set +e
+        timeout $TIME $PACKET_MONITOR $CHANNEL
+        set -e
 
 
+    done
 done
 
 # stop monitor mode
