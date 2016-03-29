@@ -13,18 +13,19 @@ PACKET_MONITOR="packet-monitor/main"
 
 STOP="sudo airmon-ng stop $MON_DEVICE"
 START="sudo airmon-ng start $DEVICE > /dev/null 2>&1"
+FORCE_STOP="$STOP ; sudo start network-manager"
 
 # disconnect from network and kill services
-# nmcli d disconnect iface $DEVICE > /dev/null
-# sudo service avahi-daemon stop
-# sudo stop network-manager
-# sudo pkill wpa_supplicant
-# sudo pkill dhclient
+nmcli d disconnect iface $DEVICE > /dev/null 2>&1
+sudo service avahi-daemon stop > /dev/null 2>&1
+sudo stop network-manager > /dev/null 2>&1
+sudo pkill wpa_supplicant
+sudo pkill dhclient
 
 set -e
 
 # make sure to cleanup mon0 when interrupted
-trap "{ $STOP ; exit 0; }" SIGINT SIGTERM EXIT
+trap "{ $FORCE_STOP ; exit 0; }" SIGINT SIGTERM EXIT
 
 # enable monitor mode for the device
 $START > /dev/null 2>&1
@@ -45,3 +46,6 @@ done
 
 # stop monitor mode
 $STOP > /dev/null 2>&1
+
+# restore service
+sudo start network-manager > /dev/null 2>&1
