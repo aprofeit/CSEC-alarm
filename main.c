@@ -278,7 +278,9 @@ int main(int argc, char **argv) {
 		printf("%i,", channel_id);
 
 		// print src address
-		printf("%s,", ETH_NTOA(i80211_header->src_addr));
+		uint8_t* src_mac = i80211_header->src_addr.ether_addr_octet;
+		printf("%02X:%02X:%02X:%02X:%02X:%02X,", src_mac[0], src_mac[1],
+				src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
 
 		// get radiotap header
 //		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr + sizeof(radiotap_hdr);
@@ -302,6 +304,7 @@ int main(int argc, char **argv) {
 
 		// max possible ssid is length is 32
 		char ssid[33];
+		// get ssid from management frame element
 		size_t ssid_buf_len = MIN(ssid_elem->length, sizeof(ssid) - 1);
 		strncpy(ssid, &ssid_elem->data, ssid_buf_len);
 		ssid[ssid_buf_len] = '\0';
