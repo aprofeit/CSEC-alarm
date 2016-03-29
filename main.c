@@ -101,7 +101,7 @@ struct i80211_mgt {
 struct i80211_mgt_elem {
 	uint8_t id;
 	uint8_t length;
-	char* data;
+	char data;
 }__attribute__((packed));
 
 // gotta love wireshark
@@ -176,7 +176,7 @@ void setupSocket(int* sockfd, struct ifreq* ifr, int ifindex,
 		exit(1);
 	}
 	ifindex = ifr->ifr_ifindex;
-	printf("%s has interface index: %i\n", DEVICE, ifindex);
+//	printf("%s has interface index: %i\n", DEVICE, ifindex);
 	// get hardware address
 	if (ioctl(*sockfd, SIOCGIFHWADDR, ifr) == -1) {
 		perror("unable to get hardware address");
@@ -186,8 +186,8 @@ void setupSocket(int* sockfd, struct ifreq* ifr, int ifindex,
 	for (int i = 0; i < 6; i++) {
 		src_mac[i] = ifr->ifr_ifru.ifru_hwaddr.sa_data[i];
 	}
-	printf("got hardware address: %02X:%02X:%02X:%02X:%02X:%02X\n", src_mac[0],
-			src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
+//	printf("got hardware address: %02X:%02X:%02X:%02X:%02X:%02X\n", src_mac[0],
+//			src_mac[1], src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
 	sockaddr->sll_family = PF_PACKET;
 	sockaddr->sll_protocol = htons(ETH_P_ARP);
 	sockaddr->sll_ifindex = ifindex;
@@ -198,9 +198,12 @@ void setupSocket(int* sockfd, struct ifreq* ifr, int ifindex,
 	sockaddr->sll_addr[7] = 0x00;
 	// register program exit hook
 	signal(SIGINT, sigint);
-	puts("waiting for incoming packets...");
+//	puts("waiting for incoming packets...");
 }
 
+/*
+ * Parameters: ./main <channel id> [test mode: 1]
+ */
 int main(int argc, char **argv) {
 
 	// ioctl request struct
@@ -218,12 +221,23 @@ int main(int argc, char **argv) {
 //	unsigned char* arp_header_start = buffer + ETH_HLEN;
 //	struct arp_header *arp_hdr;
 
+	// get channel id from argv[1]
+	int channel_id;
+	if (argc > 1) {
+		channel_id = atoi(argv[1]);
+	} else {
+		perror("please specify the channel id");
+		exit(1);
+	}
+
+
 	// check if in test mode
 	volatile int onlyOnce = 0;
-	if (argc > 1 && atoi(argv[1]) == 1) {
-		puts("TEST MODE");
+	if (argc > 2 && atoi(argv[2]) == 1) {
+		// we're in test mode. copy over a predefined packet into the buffer
+//		puts("TEST MODE");
 		onlyOnce = 1;
-		printf("testpkt len: %lu\n", sizeof(testpkt));
+//		printf("testpkt len: %lu\n", sizeof(testpkt));
 		memcpy(buffer, testpkt, sizeof(testpkt));
 
 	} else {
@@ -250,8 +264,7 @@ int main(int argc, char **argv) {
 //		printf("int size %i\n", radiotap_hdr->present);
 
 //		printf("radio ptr: %p\n", (void*) radiotap_hdr);
-		unsigned char* i80211hdr_start = (void*) radiotap_hdr
-				+ radiotap_hdr->length;
+		unsigned char* i80211hdr_start = (void*) radiotap_hdr + radiotap_hdr->length;
 
 		// get 80211 header from buffer
 		struct i80211_hdr *i80211_header = (struct i80211_hdr *) i80211hdr_start;
@@ -261,33 +274,42 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
-		// get radiotap header
-		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr
-				+ sizeof(radiotap_hdr);
-		struct radiotap_data* radiotap_data_hdr =
-				(struct radiotap_data *) radiotap_data_hdr_start;
+		// print channel id
+		printf("%i,", channel_id);
 
-		printf("signal strength: %d\n", radiotap_data_hdr->signal_strength);
+		// print src address
+		printf("%s,", ETH_NTOA(i80211_header->src_addr));
+
+		// get radiotap header
+//		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr + sizeof(radiotap_hdr);
+//		struct radiotap_data* radiotap_data_hdr = (struct radiotap_data *) radiotap_data_hdr_start;
+
+//		printf("signal strength: %d\n", radiotap_data_hdr->signal_strength);
 
 		// get 802.11 management header
 		unsigned char* i80211_mgmt_start = (void*) i80211hdr_start + 24;
 		struct i80211_mgt *i80211_mgt_frame = (struct i80211_mgt *) i80211_mgmt_start;
 
-		printf("elem1 id: %02X\n", (char) i80211_mgt_frame->elements);
+//		printf("elem1 id: %02X\n", (char) i80211_mgt_frame->elements);
 //		printf("interval: %i\n", i80211_mgt_frame->beacon_interval);
 
 		// get ssid from 802.11 management frame
 		struct i80211_mgt_elem* ssid_elem = (struct i80211_mgt_elem *) &i80211_mgt_frame->elements;
 
-		printf("id %i\n", (uint8_t) ssid_elem->id);
-		printf("len: %x\n", (uint8_t) ssid_elem->length);
+//		printf("id %i\n", (uint8_t) ssid_elem->id);
+//		printf("len: %x\n", (uint8_t) ssid_elem->length);
 //		printf("ssid1: %s\n", (char) ssid_elem->data);
 
 		// max possible ssid is length is 32
 		char ssid[33];
-		memcpy(ssid, &ssid_elem->data, MIN(ssid_elem->length, sizeof(ssid) - 1));
-		puts("copied");
-		printf("ssid: %s\n", ssid);
+		size_t ssid_buf_len = MIN(ssid_elem->length, sizeof(ssid) - 1);
+		strncpy(ssid, &ssid_elem->data, ssid_buf_len);
+		ssid[ssid_buf_len] = '\0';
+
+		// print ssid
+		printf("%s\n", ssid);
+
+
 
 
 //		printf("80211 ptr: %p\n", i80211_header);
@@ -296,7 +318,6 @@ int main(int argc, char **argv) {
 //		printf("framectl: %i\n", i80211_header->frame_ctl);
 //		printf("duration: %i\n", i80211_header->duration);
 //		printf("dst addr: %s\n", ETH_NTOA(i80211_header->dst_addr));
-//		printf("src addr: %s\n", ETH_NTOA(i80211_header->src_addr));
 //		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
 
 // only process arp packets
@@ -394,8 +415,8 @@ void sigint(int signum) {
 
 	free(buffer);
 
-	puts("exiting");
-	printf("total packets %i, answered packets %i \n", total_packets,
-			answered_packets);
+//	puts("exiting");
+//	printf("total packets %i, answered packets %i \n", total_packets,
+//			answered_packets);
 
 }
