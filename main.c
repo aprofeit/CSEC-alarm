@@ -37,6 +37,7 @@
 #define DEVICE "wlan0"
 
 #define ETH_NTOA(x) (ether_ntoa(&(x)))
+#define MIN(x, y) ((x) > (y) ? (y) : (x))
 
 // allocate a small buffer for the packet
 #define BUF_SIZE 500
@@ -93,7 +94,7 @@ struct i80211_mgt {
 	uint64_t timestamp;
 	uint16_t beacon_interval;
 	uint16_t capabilities;
-	void* elements;
+	char* elements;
 }__attribute__((packed));
 
 // 802.11 Management frame element
@@ -210,19 +211,19 @@ int main(int argc, char **argv) {
 
 	// allocate buffer for entire ethernet packet
 	buffer = (void*) malloc(BUF_SIZE);
-	unsigned char* etherhead = buffer;
-	struct ethhdr *eh = (struct ethhdr *) etherhead;
+//	unsigned char* etherhead = buffer;
+//	struct ethhdr *eh = (struct ethhdr *) etherhead;
 
 	// get the arp packet by jumping over the 14 byte ethernet header
-	unsigned char* arp_header_start = buffer + ETH_HLEN;
-	struct arp_header *arp_hdr;
+//	unsigned char* arp_header_start = buffer + ETH_HLEN;
+//	struct arp_header *arp_hdr;
 
 	// check if in test mode
 	volatile int onlyOnce = 0;
 	if (argc > 1 && atoi(argv[1]) == 1) {
-		puts("test mode");
+		puts("TEST MODE");
 		onlyOnce = 1;
-		printf("testpkt len: %i\n", sizeof(testpkt));
+		printf("testpkt len: %lu\n", sizeof(testpkt));
 		memcpy(buffer, testpkt, sizeof(testpkt));
 
 	} else {
@@ -260,6 +261,7 @@ int main(int argc, char **argv) {
 			continue;
 		}
 
+		// get radiotap header
 		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr
 				+ sizeof(radiotap_hdr);
 		struct radiotap_data* radiotap_data_hdr =
@@ -271,17 +273,21 @@ int main(int argc, char **argv) {
 		unsigned char* i80211_mgmt_start = (void*) i80211hdr_start + 24;
 		struct i80211_mgt *i80211_mgt_frame = (struct i80211_mgt *) i80211_mgmt_start;
 
-//		printf("interval: %i\n", i80211_mgt_frame->beacon_interval);
 		printf("elem1 id: %02X\n", (char) i80211_mgt_frame->elements);
+//		printf("interval: %i\n", i80211_mgt_frame->beacon_interval);
 
-		struct i80211_mgt_elem* ssid_elem = (struct i80211_mgt_elem *) i80211_mgt_frame->elements;
-		printf("id %x\n", (char) ssid_elem);
-		printf("len: %i\n", (uint8_t) &ssid_elem->length);
-		printf("ssid1: %c\n", (char) &ssid_elem+2);
+		// get ssid from 802.11 management frame
+		struct i80211_mgt_elem* ssid_elem = (struct i80211_mgt_elem *) &i80211_mgt_frame->elements;
+
+		printf("id %i\n", (uint8_t) ssid_elem->id);
+		printf("len: %x\n", (uint8_t) ssid_elem->length);
+//		printf("ssid1: %s\n", (char) ssid_elem->data);
+
+		// max possible ssid is length is 32
 		char ssid[33];
-		memcpy(ssid, &(ssid_elem->data), 5);
+		memcpy(ssid, &ssid_elem->data, MIN(ssid_elem->length, sizeof(ssid) - 1));
 		puts("copied");
-		printf("ssid: %s\n", ssid_elem->data);
+		printf("ssid: %s\n", ssid);
 
 
 //		printf("80211 ptr: %p\n", i80211_header);
@@ -294,73 +300,78 @@ int main(int argc, char **argv) {
 //		printf("trns addr: %s\n", ETH_NTOA(i80211_header->trans_addr));
 
 // only process arp packets
-		if (ntohs(eh->h_proto) == ETH_P_ARP) {
+//		if (ntohs(eh->h_proto) == ETH_P_ARP) {
+//
+//			unsigned char buf_arp_dpa[4];
+//			arp_hdr = (struct arp_header *) arp_header_start;
+//
+//			// only process arp requests
+//			if (ntohs(arp_hdr->arp_opcode) != ARPOP_REQUEST) {
+//				continue;
+//			}
+//
+//			printarppacket(arp_hdr, eh);
+//
+//			puts("switch around src and dest\n");
+//
+//			memcpy((void*) etherhead, (const void*) (etherhead + ETH_MAC_LEN),
+//			ETH_MAC_LEN);
+//
+//			memcpy((void*) (etherhead + ETH_MAC_LEN), (const void*) src_mac,
+//			ETH_MAC_LEN);
+//
+//			printf("ether dest mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
+//					eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
+//					eh->h_dest[4], eh->h_dest[5]);
+//
+//			printf("ether src mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
+//					eh->h_source[0], eh->h_source[1], eh->h_source[2],
+//					eh->h_source[3], eh->h_source[4], eh->h_source[5]);
+//
+//			// set the arp response type to REPY
+//			arp_hdr->arp_opcode = htons(ARPOP_REPLY);
+//
+//			for (int i = 0; i < 4; ++i) {
+//				buf_arp_dpa[i] = arp_hdr->arp_targetIP[i];
+//			}
+//
+//			// dest ip -> ip buffer
+//			memcpy(buf_arp_dpa, arp_hdr->arp_targetIP, sizeof(buf_arp_dpa));
+//			// sender mac addr -> dest mac addr
+//			memcpy(arp_hdr->arp_targetMAC, arp_hdr->arp_senderMAC,
+//					sizeof(arp_hdr->arp_targetMAC));
+//			// sender ip -> dest ip
+//			memcpy(arp_hdr->arp_targetIP, arp_hdr->arp_senderIP,
+//					sizeof(arp_hdr->arp_targetIP));
+//			// ip buffer -> sender ip
+//			memcpy(arp_hdr->arp_senderIP, buf_arp_dpa,
+//					sizeof(arp_hdr->arp_senderIP));
+//
+//			// change sender mac addr
+//			arp_hdr->arp_senderMAC[0] = 0x00;
+//			arp_hdr->arp_senderMAC[1] = 0x1e;
+//			arp_hdr->arp_senderMAC[2] = 0x73;
+//			arp_hdr->arp_senderMAC[3] = 0xda;
+//			arp_hdr->arp_senderMAC[4] = 0x70;
+//			arp_hdr->arp_senderMAC[5] = 0x1f;
+//
+//			printarppacket(arp_hdr, eh);
+//
+//			int sent = sendto(sockfd, buffer, BUF_SIZE, 0,
+//					(struct sockaddr*) &sockaddr, sizeof(sockaddr));
+//
+//			if (sent == -1) {
+//				perror("error sending arp packet");
+//				exit(1);
+//			}
+//
+//			answered_packets++;
+//		}
 
-			unsigned char buf_arp_dpa[4];
-			arp_hdr = (struct arp_header *) arp_header_start;
-
-			// only process arp requests
-			if (ntohs(arp_hdr->arp_opcode) != ARPOP_REQUEST) {
-				continue;
-			}
-
-			printarppacket(arp_hdr, eh);
-
-			puts("switch around src and dest\n");
-
-			memcpy((void*) etherhead, (const void*) (etherhead + ETH_MAC_LEN),
-			ETH_MAC_LEN);
-
-			memcpy((void*) (etherhead + ETH_MAC_LEN), (const void*) src_mac,
-			ETH_MAC_LEN);
-
-			printf("ether dest mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
-					eh->h_dest[4], eh->h_dest[5]);
-
-			printf("ether src mac address: %02X:%02X:%02X:%02X:%02X:%02X\n",
-					eh->h_source[0], eh->h_source[1], eh->h_source[2],
-					eh->h_source[3], eh->h_source[4], eh->h_source[5]);
-
-			// set the arp response type to REPY
-			arp_hdr->arp_opcode = htons(ARPOP_REPLY);
-
-			for (int i = 0; i < 4; ++i) {
-				buf_arp_dpa[i] = arp_hdr->arp_targetIP[i];
-			}
-
-			// dest ip -> ip buffer
-			memcpy(buf_arp_dpa, arp_hdr->arp_targetIP, sizeof(buf_arp_dpa));
-			// sender mac addr -> dest mac addr
-			memcpy(arp_hdr->arp_targetMAC, arp_hdr->arp_senderMAC,
-					sizeof(arp_hdr->arp_targetMAC));
-			// sender ip -> dest ip
-			memcpy(arp_hdr->arp_targetIP, arp_hdr->arp_senderIP,
-					sizeof(arp_hdr->arp_targetIP));
-			// ip buffer -> sender ip
-			memcpy(arp_hdr->arp_senderIP, buf_arp_dpa,
-					sizeof(arp_hdr->arp_senderIP));
-
-			// change sender mac addr
-			arp_hdr->arp_senderMAC[0] = 0x00;
-			arp_hdr->arp_senderMAC[1] = 0x1e;
-			arp_hdr->arp_senderMAC[2] = 0x73;
-			arp_hdr->arp_senderMAC[3] = 0xda;
-			arp_hdr->arp_senderMAC[4] = 0x70;
-			arp_hdr->arp_senderMAC[5] = 0x1f;
-
-			printarppacket(arp_hdr, eh);
-
-			int sent = sendto(sockfd, buffer, BUF_SIZE, 0,
-					(struct sockaddr*) &sockaddr, sizeof(sockaddr));
-
-			if (sent == -1) {
-				perror("error sending arp packet");
-				exit(1);
-			}
-
-			answered_packets++;
+		if (onlyOnce) {
+			exit(0);
 		}
+
 		total_packets++;
 	}
 
