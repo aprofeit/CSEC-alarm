@@ -34,7 +34,7 @@
 #include <arpa/inet.h>
 #include <netinet/ether.h>
 
-#define DEVICE "wlan0"
+#define DEVICE "mon0"
 
 #define ETH_NTOA(x) (ether_ntoa(&(x)))
 #define MIN(x, y) ((x) > (y) ? (y) : (x))
