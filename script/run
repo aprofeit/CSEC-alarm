@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Please run this as root or give sudo access for the airmon-ng command
+#
+
+# stop if any error occurs
+
+DEVICE="wlan0"
+MON_DEVICE="mon0"
+CHANNEL=1
+TIME=1
+PACKET_MONITOR="packet-monitor/main"
+
+STOP="sudo airmon-ng stop $MON_DEVICE"
+START="sudo airmon-ng start $DEVICE > /dev/null 2>&1"
+
+# disconnect from network and kill services
+# nmcli d disconnect iface $DEVICE > /dev/null
+# sudo service avahi-daemon stop
+# sudo stop network-manager
+# sudo pkill wpa_supplicant
+# sudo pkill dhclient
+
+set -e
+
+# make sure to cleanup mon0 when interrupted
+trap "{ $STOP ; exit 0; }" SIGINT SIGTERM EXIT
+
+# enable monitor mode for the device
+$START > /dev/null 2>&1
+
+for (( CHANNEL = 1; CHANNEL < 12; CHANNEL++ )); do
+
+    # change channel
+    echo "#channel $CHANNEL"
+    iwconfig $DEVICE channel $CHANNEL
+
+    # execute the packet-monitor for a period of time
+    set +e
+    timeout $TIME $PACKET_MONITOR $CHANNEL
+    set -e
+
+
+done
+
+# stop monitor mode
+$STOP > /dev/null 2>&1
