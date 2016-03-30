@@ -37,6 +37,7 @@ while [[ true ]]; do
         # change channel
         echo "#channel $CHANNEL"
         sudo iwconfig $DEVICE channel $CHANNEL
+        sleep 1
 
         # execute the packet-monitor for a period of time
 #        set +e
