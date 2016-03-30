@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Please run this as root or give sudo access for the airmon-ng command
-#
+# give sudo access to the current user for these commands:
+# airmon-ng, start, stop, nmcli, pkill, service, iwconfig and packet-monitor/main
 
 # stop if any error occurs
 
@@ -35,11 +36,11 @@ while [[ true ]]; do
 
         # change channel
         echo "#channel $CHANNEL"
-        iwconfig $DEVICE channel $CHANNEL
+        sudo iwconfig $DEVICE channel $CHANNEL
 
         # execute the packet-monitor for a period of time
         set +e
-        timeout $TIME $PACKET_MONITOR $CHANNEL
+        sudo timeout $TIME $PACKET_MONITOR $CHANNEL
         set -e
 
 
