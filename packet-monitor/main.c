@@ -5,13 +5,8 @@
  * - airmon-ng
  *
  * Running:
- * airmmon-ng start wlan0
+ * $ script/run-monitor
  *
- * ./main
- *
- * airmon-ng stop mon0
- *
- * Make sure to change DEVICE to "mon0"
  */
 
 #include <sys/socket.h>
@@ -26,6 +21,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#include <stdint.h>
 
 #include <linux/wireless.h>
 #include <linux/if_packet.h>
@@ -196,13 +192,12 @@ void setupSocket(int* sockfd, struct ifreq* ifr, int ifindex,
 	sockaddr->sll_halen = 0;
 	sockaddr->sll_addr[6] = 0x00;
 	sockaddr->sll_addr[7] = 0x00;
-	// register program exit hook
-	signal(SIGINT, sigint);
+
 //	puts("waiting for incoming packets...");
 }
 
 /*
- * Parameters: ./main <channel id> [test mode: 1]
+ * Parameters: ./main <channel id> <sleep time> [test mode: 1]
  */
 int main(int argc, char **argv) {
 
@@ -230,10 +225,24 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 
+	// parse run time from argv[2]
+	int runTime = 0;
+	if (argc > 2) {
+		runTime = atoi(argv[2]);
+		alarm(runTime);
+	} else {
+		perror("please specify the time to run in seconds");
+		exit(1);
+	}
+
+	// register program exit hook
+	signal(SIGINT, sigint);
+	signal(SIGALRM, sigint);
+
 
 	// check if in test mode
 	volatile int onlyOnce = 0;
-	if (argc > 2 && atoi(argv[2]) == 1) {
+	if (argc > 3 && atoi(argv[3]) == 1) {
 		// we're in test mode. copy over a predefined packet into the buffer
 //		puts("TEST MODE");
 		onlyOnce = 1;
@@ -305,7 +314,7 @@ int main(int argc, char **argv) {
 		// max possible ssid is length is 32
 		char ssid[33];
 		// get ssid from management frame element
-		size_t ssid_buf_len = MIN(ssid_elem->length, sizeof(ssid) - 1);
+		int ssid_buf_len = MIN(ssid_elem->length, sizeof(ssid) - 1);
 		strncpy(ssid, &ssid_elem->data, ssid_buf_len);
 		ssid[ssid_buf_len] = '\0';
 
@@ -421,5 +430,7 @@ void sigint(int signum) {
 //	puts("exiting");
 //	printf("total packets %i, answered packets %i \n", total_packets,
 //			answered_packets);
+
+	exit(0);
 
 }

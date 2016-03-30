@@ -39,9 +39,10 @@ while [[ true ]]; do
         sudo iwconfig $DEVICE channel $CHANNEL
 
         # execute the packet-monitor for a period of time
-        set +e
-        sudo timeout $TIME $PACKET_MONITOR $CHANNEL
-        set -e
+#        set +e
+        # sudo timeout $TIME $PACKET_MONITOR $TIME $CHANNEL
+        sudo $PACKET_MONITOR $CHANNEL $TIME
+#        set -e
 
 
     done
