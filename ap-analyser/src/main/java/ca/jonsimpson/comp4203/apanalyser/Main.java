@@ -19,15 +19,19 @@ import org.apache.log4j.Logger;
 
 public class Main {
 	
+	private static final String WHITELIST_CONFIG_FILE = "apanalyser.properties";
+	private static final String PACKET_MONITOR_BINARY = "script/run-monitor";
+
 	private static final String NO_CONFIG_MESSAGE = "Running with no configuration. No alerts will occur.";
 	
 	private final Logger log = Logger.getLogger(Main.class);
+	private final Logger alertLog = Logger.getLogger("alert");
 	
-	private static final String PACKET_MONITOR_BINARY = "script/run-monitor";
 	
 	// the map of allowed access points
 	private Map<String, Set<Entry>> whitelist;
 	private String currentChannel;
+	private int numberOfBeacons = 0;
 	
 	public static void main(String[] args) {
 		new Main();
@@ -62,7 +66,7 @@ public class Main {
 	}
 	
 	private void loadWhitelist() {
-		Path path = Paths.get("./apanalyser.properties");
+		Path path = Paths.get(WHITELIST_CONFIG_FILE);
 		File file = path.toFile();
 		log.info("reading config file from: " + file.getAbsolutePath());
 		
@@ -93,6 +97,7 @@ public class Main {
 						whitelist.put(entry.ssid, set);
 					}
 					
+					// add the Entry to the whitelist
 					set.add(entry);
 					
 				}
@@ -113,16 +118,22 @@ public class Main {
 			return;
 		}
 		
-		System.out.println(line);
+		// System.out.println(line);
 		
 		// check if this is a changing channel message
 		if (line.charAt(0) == '#') {
 			String[] strings = line.split(" ");
 			currentChannel = strings[1];
+			log.info("Channel " + currentChannel);
+			
+			// display and reset the current beacon counter
+			log.info("Number of beacons: " + numberOfBeacons);
+			numberOfBeacons = 0;
 			
 		} else {
 			// it's a message from the monitor
 			Entry entry = getEntryFromLine(line);
+			numberOfBeacons++;
 			
 			validateEntry(entry);
 		}
@@ -168,9 +179,12 @@ public class Main {
 	}
 	
 	private void alert(Entry entry) {
-		log.warn("Rouge AP detected! " + entry);
+		alertLog.info("Rouge AP detected! " + entry);
 	}
 	
+	/**
+	 * Used to represent a channel-mac-ssid tuple.
+	 */
 	public static class Entry {
 		
 		private String channel;

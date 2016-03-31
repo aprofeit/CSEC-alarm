@@ -27,4 +27,7 @@
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
+	<properties>
+		<exec.mainClass>ca.jonsimpson.comp4203.apanalyser.Main</exec.mainClass>
+	</properties>
 </project>
