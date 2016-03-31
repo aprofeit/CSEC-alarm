@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# Main entry point for the access point ap-analyser program
+
+# run the java program
+mvn -f ap-analyser/pom.xml exec:java
+
+# re enable the network manager service if the program doesn't do it
+sudo start network-manager
