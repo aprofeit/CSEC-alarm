@@ -4,7 +4,6 @@
 # give sudo access to the current user for these commands:
 # airmon-ng, start, stop, nmcli, pkill, service, iwconfig and packet-monitor/main
 
-# stop if any error occurs
 
 DEVICE="wlan0"
 MON_DEVICE="mon0"
@@ -23,10 +22,11 @@ sudo stop network-manager > /dev/null 2>&1
 sudo pkill wpa_supplicant
 sudo pkill dhclient
 
+# stop if any error occurs
 set -e
 
 # make sure to cleanup mon0 when interrupted
-trap "{ $FORCE_STOP ; exit 0; }" SIGINT SIGTERM EXIT
+trap '{ $FORCE_STOP ; echo trap ; exit 0; }' SIGINT SIGKILL SIGTERM EXIT
 
 # enable monitor mode for the device
 $START > /dev/null 2>&1
@@ -37,7 +37,7 @@ while [[ true ]]; do
         # change channel
         echo "#channel $CHANNEL"
         sudo iwconfig $DEVICE channel $CHANNEL
-        sleep 1
+        sleep 5
 
         # execute the packet-monitor for a period of time
 #        set +e

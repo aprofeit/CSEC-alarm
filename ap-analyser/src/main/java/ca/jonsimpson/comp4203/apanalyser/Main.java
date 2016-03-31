@@ -7,6 +7,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -32,6 +33,7 @@ public class Main {
 	private Map<String, Set<Entry>> whitelist;
 	private String currentChannel;
 	private int numberOfBeacons = 0;
+	private Process process;
 	
 	public static void main(String[] args) {
 		new Main();
@@ -40,11 +42,12 @@ public class Main {
 	public Main() {
 		
 		loadWhitelist();
+		registerExitHandler();
 		
 		// run the packet-monitor binary
 		try {
-			Process exec = Runtime.getRuntime().exec(PACKET_MONITOR_BINARY);
-			InputStream inputStream = exec.getInputStream();
+			process = Runtime.getRuntime().exec(PACKET_MONITOR_BINARY);
+			InputStream inputStream = process.getInputStream();
 			
 			InputStreamReader reader = new InputStreamReader(inputStream);
 			BufferedReader bufferedReader = new BufferedReader(reader);
@@ -52,7 +55,6 @@ public class Main {
 			while (true) {
 				String readLine = bufferedReader.readLine();
 				
-				// System.out.println(readLine);
 				if (readLine == null) {
 					break;
 				}
@@ -65,6 +67,31 @@ public class Main {
 		
 	}
 	
+	/**
+	 * Kill the process subprocess when the program is about to shut down
+	 */
+	private void registerExitHandler() {
+		
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			@Override
+			public void run() {
+				if (process != null) {
+					try {
+						killUnixProcess(process);
+						
+					} catch (Exception e) {
+						log.error("tried to kill the monitor process, but failed", e);
+					}
+				}
+				
+			}
+		});
+
+	}
+
+	/**
+	 * Load the whitelist from the configuration file
+	 */
 	private void loadWhitelist() {
 		Path path = Paths.get(WHITELIST_CONFIG_FILE);
 		File file = path.toFile();
@@ -112,24 +139,31 @@ public class Main {
 		
 	}
 	
+	/**
+	 * Process the access point information line by line. Determine whether the
+	 * line is a channel update or access point information, then perform
+	 * actions based upon that.
+	 * 
+	 * @param line
+	 */
 	private void processLine(String line) {
 		
 		if (line == null || line.length() == 0) {
 			return;
 		}
 		
-		// System.out.println(line);
-		
 		// check if this is a changing channel message
 		if (line.charAt(0) == '#') {
-			String[] strings = line.split(" ");
-			currentChannel = strings[1];
-			log.info("Channel " + currentChannel);
 			
 			// display and reset the current beacon counter
-			log.info("Number of beacons: " + numberOfBeacons);
-			numberOfBeacons = 0;
-			
+			if (currentChannel != null) {
+				log.info("Channel " + currentChannel + " number of beacons: " + numberOfBeacons);
+				numberOfBeacons = 0;
+			}
+
+			// update the current channel
+			String[] strings = line.split(" ");
+			currentChannel = strings[1];
 		} else {
 			// it's a message from the monitor
 			Entry entry = getEntryFromLine(line);
@@ -180,6 +214,23 @@ public class Main {
 	
 	private void alert(Entry entry) {
 		alertLog.info("Rouge AP detected! " + entry);
+	}
+	
+	private static int getUnixPID(Process process) throws Exception {
+		if (process.getClass().getName().equals("java.lang.UNIXProcess")) {
+			Class cl = process.getClass();
+			Field field = cl.getDeclaredField("pid");
+			field.setAccessible(true);
+			Object pidObject = field.get(process);
+			return (Integer) pidObject;
+		} else {
+			throw new IllegalArgumentException("Needs to be a UNIXProcess");
+		}
+	}
+	
+	public static int killUnixProcess(Process process) throws Exception {
+		int pid = getUnixPID(process);
+		return Runtime.getRuntime().exec("kill " + pid).waitFor();
 	}
 	
 	/**
