@@ -10,15 +10,21 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import org.apache.log4j.Logger;
 
 public class Main {
+
+	private static final int STATISTICS_PRINT_INTERVAL = 10 * 1000;
 	
 	private static final String WHITELIST_CONFIG_FILE = "apanalyser.properties";
 	private static final String PACKET_MONITOR_BINARY = "script/run-monitor";
@@ -31,9 +37,9 @@ public class Main {
 	
 	// the map of allowed access points
 	private Map<String, Set<Entry>> whitelist;
-	private String currentChannel;
-	private int numberOfBeacons = 0;
 	private Process process;
+	
+	private Map<Integer, Integer> statistics = new HashMap<>();
 	
 	public static void main(String[] args) {
 		new Main();
@@ -43,6 +49,7 @@ public class Main {
 		
 		loadWhitelist();
 		registerExitHandler();
+		startStatisticsPrinter();
 		
 		// run the packet-monitor binary
 		try {
@@ -67,6 +74,12 @@ public class Main {
 		
 	}
 	
+	private void startStatisticsPrinter() {
+		Timer timer = new Timer("statistics printer");
+		timer.scheduleAtFixedRate(printStats, STATISTICS_PRINT_INTERVAL, STATISTICS_PRINT_INTERVAL);
+		
+	}
+
 	/**
 	 * Kill the process subprocess when the program is about to shut down
 	 */
@@ -154,26 +167,41 @@ public class Main {
 		
 		// check if this is a changing channel message
 		if (line.charAt(0) == '#') {
+			// ignore these messages
 			
-			// display and reset the current beacon counter
-			if (currentChannel != null) {
-				log.info("Channel " + currentChannel + " number of beacons: " + numberOfBeacons);
-				numberOfBeacons = 0;
-			}
-
-			// update the current channel
-			String[] strings = line.split(" ");
-			currentChannel = strings[1];
 		} else {
 			// it's a message from the monitor
 			Entry entry = getEntryFromLine(line);
-			numberOfBeacons++;
 			
+			logEntry(entry);
 			validateEntry(entry);
 		}
 		
 	}
 	
+	/**
+	 * Log the channel by incrementing the statistic map.
+	 * @param entry
+	 */
+	private void logEntry(Entry entry) {
+		
+		// get the channel and it's value from the statistics map
+		Integer channel = entry.channel;
+		if (channel == null) {
+			return;
+		}
+		Integer counter = statistics.get(channel);
+		
+		// set counter to 0 if null
+		if (counter == null) {
+			counter = 0;
+		}
+		
+		// increment counter and put back into the map
+		counter++;
+		statistics.put(channel, counter);
+	}
+
 	/**
 	 * Take a String and return a representation of it as an Entry.
 	 * 
@@ -185,7 +213,10 @@ public class Main {
 		
 		String channel = strings[0];
 		String mac = strings[1];
-		String ssid = strings[2];
+		String ssid = "";
+		if (strings.length > 2) {
+			ssid = strings[2];
+		}
 		
 		Entry entry = new Entry(channel, mac, ssid);
 		return entry;
@@ -233,17 +264,43 @@ public class Main {
 		return Runtime.getRuntime().exec("kill " + pid).waitFor();
 	}
 	
+	private TimerTask printStats = new TimerTask() {
+		
+		@Override
+		public void run() {
+			
+			StringBuilder sb = new StringBuilder();
+			sb.append("Beacons received: \n");
+			
+			// iterate over each channel from the statistics map, outputting the beacon count
+			Set<Integer> keys = statistics.keySet();
+			ArrayList<Integer> list = new ArrayList<>(keys);
+			Collections.sort(list);
+			
+			for (Integer key : list) {
+				Integer integer = statistics.get(key);
+				sb.append("Channel: ").append(key).append(" count: ").append(integer).append('\n');
+
+			}
+			
+			log.info(sb);
+			
+			// clear the statistics
+			statistics.clear();
+		}
+	};
+	
 	/**
 	 * Used to represent a channel-mac-ssid tuple.
 	 */
 	public static class Entry {
 		
-		private String channel;
+		private Integer channel;
 		private String mac;
 		private String ssid;
 		
 		public Entry(String channel, String mac, String ssid) {
-			this.channel = channel;
+			this.channel = Integer.parseInt(channel);
 			this.mac = mac;
 			this.ssid = ssid;
 		}
