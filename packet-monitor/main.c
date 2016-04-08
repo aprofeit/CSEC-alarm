@@ -284,12 +284,10 @@ int main(int argc, char **argv) {
 		}
 
 		// print channel id
-		printf("%i,", channel_id);
+//		printf("%i,", channel_id);
 
 		// print src address
 		uint8_t* src_mac = i80211_header->src_addr.ether_addr_octet;
-		printf("%02X:%02X:%02X:%02X:%02X:%02X,", src_mac[0], src_mac[1],
-				src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
 
 		// get radiotap header
 //		unsigned char* radiotap_data_hdr_start = (void*) radiotap_hdr + sizeof(radiotap_hdr);
@@ -305,7 +303,7 @@ int main(int argc, char **argv) {
 //		printf("interval: %i\n", i80211_mgt_frame->beacon_interval);
 
 		// get ssid from 802.11 management frame
-		struct i80211_mgt_elem* ssid_elem = (struct i80211_mgt_elem *) &i80211_mgt_frame->elements;
+		struct i80211_mgt_elem* mgt_elem = (struct i80211_mgt_elem *) &i80211_mgt_frame->elements;
 
 //		printf("id %i\n", (uint8_t) ssid_elem->id);
 //		printf("len: %x\n", (uint8_t) ssid_elem->length);
@@ -314,14 +312,27 @@ int main(int argc, char **argv) {
 		// max possible ssid is length is 32
 		char ssid[33];
 		// get ssid from management frame element
-		int ssid_buf_len = MIN(ssid_elem->length, sizeof(ssid) - 1);
-		strncpy(ssid, &ssid_elem->data, ssid_buf_len);
+		int ssid_buf_len = MIN(mgt_elem->length, sizeof(ssid) - 1);
+		strncpy(ssid, &mgt_elem->data, ssid_buf_len);
 		ssid[ssid_buf_len] = '\0';
+
+
+		while (mgt_elem->id <= 0x03) {
+			// get id
+			if (mgt_elem->id == 0x03) {
+//				printf("%i\n", mgt_elem->id);
+				// print channel number
+				printf("%i,", mgt_elem->data);
+			}
+			// get channel from 802.11 management frame DS tag
+			mgt_elem = (struct i80211_mgt_elem *) ((uint8_t*)mgt_elem + mgt_elem->length + 2);
+		}
+
+		printf("%02X:%02X:%02X:%02X:%02X:%02X,", src_mac[0], src_mac[1],
+						src_mac[2], src_mac[3], src_mac[4], src_mac[5]);
 
 		// print ssid
 		printf("%s\n", ssid);
-
-
 
 
 //		printf("80211 ptr: %p\n", i80211_header);
