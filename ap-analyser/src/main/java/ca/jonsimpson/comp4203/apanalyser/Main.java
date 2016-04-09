@@ -244,7 +244,7 @@ public class Main {
 	}
 	
 	private void alert(Entry entry) {
-		alertLog.info("Rouge AP detected! " + entry);
+		alertLog.info("Rogue AP detected! " + entry);
 	}
 	
 	private static int getUnixPID(Process process) throws Exception {
